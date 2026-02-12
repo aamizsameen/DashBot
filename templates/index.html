@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataLens — CSV Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #0e1117;
+            --panel: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --accent2: #1f6feb;
+            --green: #3fb950;
+            --red: #f85149;
+            --orange: #d29922;
+            --card: #21262d;
+            --hover: #1c2128;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif
+        }
+
+        html,
+        body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            overflow: hidden
+        }
+
+        /* Layout */
+        .app {
+            display: flex;
+            height: 100vh;
+            width: 100vw
+        }
+
+        .sidebar {
+            width: 280px;
+            min-width: 220px;
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: width .2s;
+            overflow: hidden
+        }
+
+        .sidebar.collapsed {
+            width: 48px;
+            min-width: 48px
+        }
+
+        .sidebar.collapsed .sidebar-content {
+            display: none
+        }
+
+        .sidebar.collapsed .sidebar-header span {
+            display: none
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 0
+        }
+
+        .chatpanel {
+            width: 360px;
+            min-width: 280px;
+            background: var(--panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: width .2s;
+            overflow: hidden
+        }
+
+        .chatpanel.collapsed {
+            width: 48px;
+            min-width: 48px
+        }
+
+        .chatpanel.collapsed .chat-body,
+        .chatpanel.collapsed .chat-input-area {
+            display: none
+        }
+
+        .chatpanel.collapsed .chat-header span {
+            display: none
+        }
+
+        /* Sidebar */
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none
+        }
+
+        .sidebar-header svg {
+            flex-shrink: 0
+        }
+
+        .sidebar-header span {
+            font-weight: 600;
+            font-size: 15px;
+            white-space: nowrap
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            padding: 32px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            margin-bottom: 16px
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(88, 166, 255, .06)
+        }
+
+        .upload-zone svg {
+            margin-bottom: 8px
+        }
+
+        .upload-zone p {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 6px
+        }
+
+        .file-info {
+            background: var(--card);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px
+        }
+
+        .file-info h4 {
+            font-size: 13px;
+            color: var(--accent);
+            margin-bottom: 6px
+        }
+
+        .file-info .meta {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.6
+        }
+
+        .col-list {
+            max-height: 300px;
+            overflow-y: auto
+        }
+
+        .col-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background .15s
+        }
+
+        .col-item:hover {
+            background: var(--hover)
+        }
+
+        .col-item .dtype {
+            color: var(--muted);
+            font-size: 11px;
+            background: var(--bg);
+            padding: 1px 6px;
+            border-radius: 4px
+        }
+
+        /* Main dashboard */
+        .main-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel)
+        }
+
+        .main-header h2 {
+            font-size: 16px;
+            font-weight: 600
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px
+        }
+
+        .tab-bar button {
+            background: none;
+            border: none;
+            color: var(--muted);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all .15s
+        }
+
+        .tab-bar button.active {
+            background: var(--accent2);
+            color: #fff
+        }
+
+        .dashboard {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: grid;
+            gap: 16px
+        }
+
+        .dashboard.overview {
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))
+        }
+
+        .dashboard.table-view {
+            grid-template-columns: 1fr
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            transition: border-color .2s
+        }
+
+        .card:hover {
+            border-color: var(--accent)
+        }
+
+        .card h3 {
+            font-size: 13px;
+            color: var(--accent);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px
+        }
+
+        .stat {
+            background: var(--bg);
+            border-radius: 6px;
+            padding: 8px 10px
+        }
+
+        .stat .label {
+            font-size: 11px;
+            color: var(--muted)
+        }
+
+        .stat .value {
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 2px
+        }
+
+        .chart-container {
+            position: relative;
+            height: 180px
+        }
+
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 120px;
+            padding-top: 8px
+        }
+
+        .bar-chart .bar-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px
+        }
+
+        .bar-chart .bar {
+            width: 100%;
+            background: var(--accent2);
+            border-radius: 3px 3px 0 0;
+            min-height: 2px;
+            transition: height .4s
+        }
+
+        .bar-chart .bar-label {
+            font-size: 10px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 60px;
+            text-align: center
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--muted);
+            gap: 12px;
+            text-align: center;
+            padding: 40px
+        }
+
+        .empty-state svg {
+            opacity: .4
+        }
+
+        .empty-state p {
+            max-width: 320px;
+            line-height: 1.6
+        }
+
+        /* Data table */
+        .data-table-wrap {
+            overflow: auto;
+            max-height: 70vh
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px
+        }
+
+        .data-table th {
+            position: sticky;
+            top: 0;
+            background: var(--panel);
+            color: var(--accent);
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap
+        }
+
+        .data-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .data-table tr:hover td {
+            background: var(--hover)
+        }
+
+        /* Correlation */
+        .corr-grid {
+            display: grid;
+            gap: 1px;
+            font-size: 11px
+        }
+
+        .corr-cell {
+            padding: 4px;
+            text-align: center;
+            border-radius: 2px;
+            font-weight: 500
+        }
+
+        /* Chat */
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            user-select: none
+        }
+
+        .chat-header svg {
+            flex-shrink: 0
+        }
+
+        .chat-header span {
+            font-weight: 600;
+            font-size: 15px;
+            white-space: nowrap
+        }
+
+        .chat-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .msg {
+            max-width: 92%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.55;
+            word-wrap: break-word
+        }
+
+        .msg.bot {
+            background: var(--card);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px
+        }
+
+        .msg.user {
+            background: var(--accent2);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            color: #fff
+        }
+
+        .msg pre {
+            background: var(--bg);
+            padding: 8px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 6px 0;
+            font-size: 12px
+        }
+
+        .msg code {
+            font-size: 12px
+        }
+
+        .msg table {
+            border-collapse: collapse;
+            margin: 6px 0;
+            font-size: 12px
+        }
+
+        .msg table th,
+        .msg table td {
+            border: 1px solid var(--border);
+            padding: 4px 8px
+        }
+
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none
+        }
+
+        .chat-input-area input:focus {
+            border-color: var(--accent)
+        }
+
+        .chat-input-area button {
+            background: var(--accent2);
+            border: none;
+            border-radius: 8px;
+            padding: 0 16px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background .15s
+        }
+
+        .chat-input-area button:hover {
+            background: var(--accent)
+        }
+
+        /* Resize handles */
+        .resize-handle {
+            width: 4px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background .15s;
+            flex-shrink: 0
+        }
+
+        .resize-handle:hover,
+        .resize-handle.active {
+            background: var(--accent)
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--muted)
+        }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .6s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .typing-dots::after {
+            content: '...';
+            animation: dots 1.2s steps(4, end) infinite
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '.'
+            }
+
+            40% {
+                content: '..'
+            }
+
+            60%,
+            100% {
+                content: '...'
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <!-- LEFT SIDEBAR -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header" onclick="toggleSidebar()" role="button" aria-label="Toggle sidebar"
+                tabindex="0">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h14M3 10h14M3 14h14" />
+                </svg>
+                <span>Data Explorer</span>
+            </div>
+            <div class="sidebar-content">
+                <div class="upload-zone" id="uploadZone" role="button" aria-label="Upload CSV file" tabindex="0">
+                    <svg width="36" height="36" fill="none" stroke="var(--muted)" stroke-width="1.5"
+                        viewBox="0 0 24 24">
+                        <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" />
+                    </svg>
+                    <p>Drop CSV here or click to upload</p>
+                    <input type="file" id="fileInput" accept=".csv" hidden aria-label="CSV file input">
+                </div>
+                <div id="fileInfo"></div>
+                <div id="colList" class="col-list"></div>
+            </div>
+        </div>
+        <div class="resize-handle" id="resizeLeft"></div>
+
+        <!-- MAIN DASHBOARD -->
+        <div class="main">
+            <div class="main-header">
+                <h2 id="mainTitle">Dashboard</h2>
+                <div class="tab-bar" id="tabBar">
+                    <button class="active" data-tab="overview">Overview</button>
+                    <button data-tab="columns">Columns</button>
+                    <button data-tab="correlation">Correlation</button>
+                    <button data-tab="table">Data Table</button>
+                </div>
+            </div>
+            <div class="dashboard overview" id="dashboard">
+                <div class="empty-state" id="emptyState">
+                    <svg width="64" height="64" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                        <path d="M3 3v18h18M7 16l4-4 4 4 5-5" />
+                    </svg>
+                    <p>Upload a CSV file from the sidebar to start exploring your data with rich analytics and
+                        AI-powered insights.</p>
+                </div>
+            </div>
+        </div>
+        <div class="resize-handle" id="resizeRight"></div>
+
+        <!-- RIGHT CHAT PANEL -->
+        <div class="chatpanel" id="chatpanel">
+            <div class="chat-header" onclick="toggleChat()" role="button" aria-label="Toggle chat panel" tabindex="0">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg>
+                <span>AI Analyst</span>
+            </div>
+            <div class="chat-body" id="chatBody">
+                <div class="msg bot">Hi! Upload a CSV and ask me anything about your data. I can summarize, find
+                    patterns, or even suggest charts.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Ask about your data..." aria-label="Chat message input"
+                    onkeydown="if(event.key==='Enter')sendChat()">
+                <button onclick="sendChat()" aria-label="Send message">Send</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let analytics = null;
+        let currentTab = 'overview';
+        let chartInstances = [];
+
+        // --- Sidebar & Chat toggle ---
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+        function toggleChat() { document.getElementById('chatpanel').classList.toggle('collapsed'); }
+
+        // --- Resize handles ---
+        function initResize(handleId, target, side) {
+            const handle = document.getElementById(handleId);
+            let startX, startW;
+            handle.addEventListener('mousedown', e => {
+                e.preventDefault(); handle.classList.add('active');
+                const el = document.getElementById(target);
+                startX = e.clientX; startW = el.offsetWidth;
+                const onMove = ev => {
+                    const diff = side === 'left' ? ev.clientX - startX : startX - ev.clientX;
+                    el.style.width = Math.max(200, startW + diff) + 'px';
+                };
+                const onUp = () => { handle.classList.remove('active'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+        initResize('resizeLeft', 'sidebar', 'left');
+        initResize('resizeRight', 'chatpanel', 'right');
+
+        // --- Upload ---
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.csv')) { alert('Please upload a CSV file.'); return; }
+            const fd = new FormData(); fd.append('file', file);
+            uploadZone.innerHTML = '<div class="spinner"></div><p>Analyzing...</p>';
+            fetch('/upload', { method: 'POST', body: fd })
+                .then(r => r.json()).then(data => {
+                    if (data.error) { alert(data.error); resetUpload(); return; }
+                    analytics = data;
+                    renderSidebar(file.name);
+                    renderDashboard();
+                }).catch(e => { alert('Upload failed: ' + e); resetUpload(); });
+        }
+        function resetUpload() {
+            uploadZone.innerHTML = '<svg width="36" height="36" fill="none" stroke="var(--muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg><p>Drop CSV here or click to upload</p>';
+        }
+
+        // --- Sidebar info ---
+        function renderSidebar(fname) {
+            uploadZone.innerHTML = '✅ <b>' + fname + '</b><p style="margin-top:6px;font-size:12px;color:var(--muted)">Click to replace</p>';
+            let info = `<div class="file-info"><h4>📊 Dataset Summary</h4><div class="meta">${analytics.rows.toLocaleString()} rows × ${analytics.cols} columns<br>`;
+            const numCols = analytics.columns.filter(c => c.is_numeric).length;
+            info += `${numCols} numeric · ${analytics.cols - numCols} categorical</div></div>`;
+            document.getElementById('fileInfo').innerHTML = info;
+            let cols = analytics.columns.map(c =>
+                `<div class="col-item"><span>${c.name}</span><span class="dtype">${c.dtype}</span></div>`
+            ).join('');
+            document.getElementById('colList').innerHTML = cols;
+        }
+
+        // --- Tabs ---
+        document.getElementById('tabBar').addEventListener('click', e => {
+            if (e.target.tagName !== 'BUTTON') return;
+            document.querySelectorAll('#tabBar button').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentTab = e.target.dataset.tab;
+            renderDashboard();
+        });
+
+        // --- Dashboard rendering ---
+        function renderDashboard() {
+            const dash = document.getElementById('dashboard');
+            chartInstances.forEach(c => c.destroy()); chartInstances = [];
+            if (!analytics) { dash.innerHTML = document.getElementById('emptyState')?.outerHTML || ''; return; }
+            dash.className = 'dashboard ' + (currentTab === 'table' ? 'table-view' : currentTab === 'correlation' ? 'table-view' : 'overview');
+            if (currentTab === 'overview') renderOverview(dash);
+            else if (currentTab === 'columns') renderColumns(dash);
+            else if (currentTab === 'correlation') renderCorrelation(dash);
+            else if (currentTab === 'table') renderTable(dash);
+        }
+
+        function renderOverview(dash) {
+            let html = '';
+            // Summary cards
+            html += `<div class="card"><h3>📋 Quick Stats</h3><div class="stat-grid">
+    <div class="stat"><div class="label">Rows</div><div class="value">${analytics.rows.toLocaleString()}</div></div>
+    <div class="stat"><div class="label">Columns</div><div class="value">${analytics.cols}</div></div>
+    <div class="stat"><div class="label">Numeric</div><div class="value">${analytics.columns.filter(c => c.is_numeric).length}</div></div>
+    <div class="stat"><div class="label">Categorical</div><div class="value">${analytics.columns.filter(c => !c.is_numeric).length}</div></div>
+  </div></div>`;
+            // Null overview
+            const nullCols = analytics.columns.filter(c => c.nulls > 0);
+            if (nullCols.length) {
+                html += `<div class="card"><h3>⚠️ Missing Values</h3><div class="stat-grid">${nullCols.map(c =>
+                    `<div class="stat"><div class="label">${c.name}</div><div class="value" style="color:var(--orange)">${c.nulls} (${(c.nulls / analytics.rows * 100).toFixed(1)}%)</div></div>`
+                ).join('')}</div></div>`;
+            }
+            // Top numeric distributions
+            analytics.columns.filter(c => c.is_numeric).slice(0, 4).forEach(c => {
+                html += `<div class="card"><h3>📈 ${c.name}</h3><div class="stat-grid">
+      <div class="stat"><div class="label">Mean</div><div class="value">${c.mean ?? '—'}</div></div>
+      <div class="stat"><div class="label">Median</div><div class="value">${c.median ?? '—'}</div></div>
+      <div class="stat"><div class="label">Std Dev</div><div class="value">${c.std ?? '—'}</div></div>
+      <div class="stat"><div class="label">Range</div><div class="value">${c.min ?? '—'} – ${c.max ?? '—'}</div></div>
+    </div><canvas id="hist_${c.name.replace(/\W/g, '_')}" height="140"></canvas></div>`;
+            });
+            // Top categorical
+            analytics.columns.filter(c => !c.is_numeric).slice(0, 4).forEach(c => {
+                if (!c.top_values || !c.top_values.length) return;
+                html += `<div class="card"><h3>🏷️ ${c.name}</h3><canvas id="cat_${c.name.replace(/\W/g, '_')}" height="160"></canvas></div>`;
+            });
+            dash.innerHTML = html;
+            // Draw charts after DOM update
+            requestAnimationFrame(() => {
+                analytics.columns.filter(c => c.is_numeric).slice(0, 4).forEach(c => {
+                    const el = document.getElementById('hist_' + c.name.replace(/\W/g, '_'));
+                    if (!el || !c.histogram) return;
+                    const labels = c.histogram.edges.slice(0, -1).map((e, i) => `${e.toFixed(1)}`);
+                    chartInstances.push(new Chart(el, {
+                        type: 'bar', data: {
+                            labels, datasets: [{
+                                data: c.histogram.counts,
+                                backgroundColor: 'rgba(31,111,235,.6)', borderRadius: 3
+                            }]
+                        }, options: {
+                            plugins: { legend: { display: false } },
+                            scales: { x: { display: false }, y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } } }
+                        }
+                    }));
+                });
+                analytics.columns.filter(c => !c.is_numeric).slice(0, 4).forEach(c => {
+                    const el = document.getElementById('cat_' + c.name.replace(/\W/g, '_'));
+                    if (!el || !c.top_values) return;
+                    const colors = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#79c0ff', '#56d364', '#e3b341', '#ffa198', '#d2a8ff'];
+                    chartInstances.push(new Chart(el, {
+                        type: 'doughnut', data: {
+                            labels: c.top_values.map(v => v.value),
+                            datasets: [{ data: c.top_values.map(v => v.count), backgroundColor: colors }]
+                        },
+                        options: { plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: { size: 11 } } } } }
+                    }));
+                });
+            });
+        }
+
+        function renderColumns(dash) {
+            let html = '';
+            analytics.columns.forEach(c => {
+                html += `<div class="card"><h3>${c.is_numeric ? '🔢' : '🏷️'} ${c.name} <span class="dtype" style="margin-left:auto">${c.dtype}</span></h3>`;
+                html += `<div class="stat-grid">
+      <div class="stat"><div class="label">Unique</div><div class="value">${c.unique}</div></div>
+      <div class="stat"><div class="label">Nulls</div><div class="value">${c.nulls}</div></div>`;
+                if (c.is_numeric) {
+                    html += `<div class="stat"><div class="label">Min</div><div class="value">${c.min ?? '—'}</div></div>
+        <div class="stat"><div class="label">Max</div><div class="value">${c.max ?? '—'}</div></div>
+        <div class="stat"><div class="label">Mean</div><div class="value">${c.mean ?? '—'}</div></div>
+        <div class="stat"><div class="label">Median</div><div class="value">${c.median ?? '—'}</div></div>
+        <div class="stat"><div class="label">Q1</div><div class="value">${c.q1 ?? '—'}</div></div>
+        <div class="stat"><div class="label">Q3</div><div class="value">${c.q3 ?? '—'}</div></div>`;
+                }
+                html += '</div>';
+                if (!c.is_numeric && c.top_values) {
+                    html += '<div style="margin-top:10px">' + c.top_values.map(v =>
+                        `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${v.value}</span><span style="color:var(--muted)">${v.count}</span></div>`
+                    ).join('') + '</div>';
+                }
+                html += '</div>';
+            });
+            dash.innerHTML = html;
+        }
+
+        function renderCorrelation(dash) {
+            if (!analytics.correlation) { dash.innerHTML = '<div class="card"><h3>Correlation Matrix</h3><p style="color:var(--muted)">Need at least 2 numeric columns.</p></div>'; return; }
+            const { labels, matrix } = analytics.correlation;
+            let html = '<div class="card" style="overflow:auto"><h3>🔗 Correlation Matrix</h3>';
+            html += '<table class="data-table"><thead><tr><th></th>' + labels.map(l => `<th>${l}</th>`).join('') + '</tr></thead><tbody>';
+            matrix.forEach((row, i) => {
+                html += '<tr><td style="font-weight:600;color:var(--accent)">' + labels[i] + '</td>';
+                row.forEach(v => {
+                    const abs = Math.abs(v);
+                    const bg = v > 0 ? `rgba(63,185,80,${abs * .5})` : `rgba(248,81,73,${abs * .5})`;
+                    html += `<td style="background:${bg};text-align:center">${v.toFixed(2)}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            dash.innerHTML = html;
+        }
+
+        function renderTable(dash) {
+            if (!analytics.sample || !analytics.sample.length) { dash.innerHTML = '<div class="card"><p>No data.</p></div>'; return; }
+            const cols = Object.keys(analytics.sample[0]);
+            let html = '<div class="card" style="overflow:auto"><h3>📄 Sample Data (first 5 rows)</h3><div class="data-table-wrap"><table class="data-table"><thead><tr>';
+            cols.forEach(c => html += `<th>${c}</th>`);
+            html += '</tr></thead><tbody>';
+            analytics.sample.forEach(row => {
+                html += '<tr>' + cols.map(c => `<td>${row[c] ?? ''}</td>`).join('') + '</tr>';
+            });
+            html += '</tbody></table></div></div>';
+            dash.innerHTML = html;
+        }
+
+        // --- Chat ---
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            appendMsg(msg, 'user');
+            input.value = '';
+            const typing = appendMsg('<span class="typing-dots">Thinking</span>', 'bot', true);
+            fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+                .then(r => {
+                    if (!r.ok) throw new Error('Server returned ' + r.status);
+                    return r.json();
+                })
+                .then(data => {
+                    if (typing.parentNode) typing.remove();
+                    const reply = data.reply || 'Sorry, something went wrong.';
+                    // Check for chart blocks
+                    const chartMatch = reply.match(/```chart\s*([\s\S]*?)```/);
+                    if (chartMatch) {
+                        try {
+                            const spec = JSON.parse(chartMatch[1]);
+                            const textPart = reply.replace(/```chart[\s\S]*?```/, '').trim();
+                            if (textPart) appendMsg(marked.parse(textPart), 'bot', true);
+                            appendChart(spec);
+                        } catch (e) { appendMsg(marked.parse(reply), 'bot', true); }
+                    } else {
+                        appendMsg(marked.parse(reply), 'bot', true);
+                    }
+                }).catch(e => { if (typing.parentNode) typing.remove(); appendMsg('Error: ' + e.message, 'bot'); });
+        }
+
+        function appendMsg(content, role, isHtml = false) {
+            const body = document.getElementById('chatBody');
+            const div = document.createElement('div');
+            div.className = 'msg ' + role;
+            if (isHtml) div.innerHTML = content; else div.textContent = content;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+            return div;
+        }
+
+        function appendChart(spec) {
+            const body = document.getElementById('chatBody');
+            const wrap = document.createElement('div');
+            wrap.className = 'msg bot';
+            wrap.style.width = '100%';
+            const canvas = document.createElement('canvas');
+            canvas.height = 200;
+            wrap.appendChild(canvas);
+            body.appendChild(wrap);
+            body.scrollTop = body.scrollHeight;
+            const colors = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff'];
+            new Chart(canvas, {
+                type: spec.type || 'bar', data: {
+                    labels: spec.labels || [],
+                    datasets: (spec.datasets || []).map((ds, i) => ({
+                        ...ds, backgroundColor: colors[i % colors.length],
+                        borderColor: colors[i % colors.length]
+                    }))
+                },
+                options: {
+                    plugins: {
+                        title: { display: !!spec.title, text: spec.title, color: '#c9d1d9' },
+                        legend: { labels: { color: '#c9d1d9' } }
+                    }, scales: { x: { ticks: { color: '#8b949e' } }, y: { ticks: { color: '#8b949e' } } }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
