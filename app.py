@@ -46,8 +46,9 @@ def compute_analytics(df: pd.DataFrame) -> dict:
         corr = num_cols.corr().round(3)
         info["correlation"] = {"labels": list(corr.columns),
                                "matrix": corr.values.tolist()}
-    # Sample rows
-    info["sample"] = json.loads(df.head(5).to_json(orient="records", date_format="iso"))
+    # Sample rows (more for builder mode)
+    info["sample"] = json.loads(df.head(50).to_json(orient="records", date_format="iso"))
+    info["all_data"] = json.loads(df.to_json(orient="records", date_format="iso")) if len(df) <= 5000 else None
     return info
 
 

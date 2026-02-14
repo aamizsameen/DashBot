@@ -1,948 +1,599 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataLens — CSV Analytics</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box
-        }
-
-        :root {
-            --bg: #0e1117;
-            --panel: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --muted: #8b949e;
-            --accent: #58a6ff;
-            --accent2: #1f6feb;
-            --green: #3fb950;
-            --red: #f85149;
-            --orange: #d29922;
-            --card: #21262d;
-            --hover: #1c2128;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif
-        }
-
-        html,
-        body {
-            height: 100%;
-            background: var(--bg);
-            color: var(--text);
-            font-size: 14px;
-            overflow: hidden
-        }
-
-        /* Layout */
-        .app {
-            display: flex;
-            height: 100vh;
-            width: 100vw
-        }
-
-        .sidebar {
-            width: 280px;
-            min-width: 220px;
-            background: var(--panel);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            transition: width .2s;
-            overflow: hidden
-        }
-
-        .sidebar.collapsed {
-            width: 48px;
-            min-width: 48px
-        }
-
-        .sidebar.collapsed .sidebar-content {
-            display: none
-        }
-
-        .sidebar.collapsed .sidebar-header span {
-            display: none
-        }
-
-        .main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            min-width: 0
-        }
-
-        .chatpanel {
-            width: 360px;
-            min-width: 280px;
-            background: var(--panel);
-            border-left: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            transition: width .2s;
-            overflow: hidden
-        }
-
-        .chatpanel.collapsed {
-            width: 48px;
-            min-width: 48px
-        }
-
-        .chatpanel.collapsed .chat-body,
-        .chatpanel.collapsed .chat-input-area {
-            display: none
-        }
-
-        .chatpanel.collapsed .chat-header span {
-            display: none
-        }
-
-        /* Sidebar */
-        .sidebar-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            user-select: none
-        }
-
-        .sidebar-header svg {
-            flex-shrink: 0
-        }
-
-        .sidebar-header span {
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap
-        }
-
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 14px
-        }
-
-        .upload-zone {
-            border: 2px dashed var(--border);
-            border-radius: 10px;
-            padding: 32px 16px;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color .2s, background .2s;
-            margin-bottom: 16px
-        }
-
-        .upload-zone:hover,
-        .upload-zone.dragover {
-            border-color: var(--accent);
-            background: rgba(88, 166, 255, .06)
-        }
-
-        .upload-zone svg {
-            margin-bottom: 8px
-        }
-
-        .upload-zone p {
-            color: var(--muted);
-            font-size: 13px;
-            margin-top: 6px
-        }
-
-        .file-info {
-            background: var(--card);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 12px
-        }
-
-        .file-info h4 {
-            font-size: 13px;
-            color: var(--accent);
-            margin-bottom: 6px
-        }
-
-        .file-info .meta {
-            font-size: 12px;
-            color: var(--muted);
-            line-height: 1.6
-        }
-
-        .col-list {
-            max-height: 300px;
-            overflow-y: auto
-        }
-
-        .col-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background .15s
-        }
-
-        .col-item:hover {
-            background: var(--hover)
-        }
-
-        .col-item .dtype {
-            color: var(--muted);
-            font-size: 11px;
-            background: var(--bg);
-            padding: 1px 6px;
-            border-radius: 4px
-        }
-
-        /* Main dashboard */
-        .main-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--panel)
-        }
-
-        .main-header h2 {
-            font-size: 16px;
-            font-weight: 600
-        }
-
-        .tab-bar {
-            display: flex;
-            gap: 4px
-        }
-
-        .tab-bar button {
-            background: none;
-            border: none;
-            color: var(--muted);
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all .15s
-        }
-
-        .tab-bar button.active {
-            background: var(--accent2);
-            color: #fff
-        }
-
-        .dashboard {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            display: grid;
-            gap: 16px
-        }
-
-        .dashboard.overview {
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))
-        }
-
-        .dashboard.table-view {
-            grid-template-columns: 1fr
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px;
-            transition: border-color .2s
-        }
-
-        .card:hover {
-            border-color: var(--accent)
-        }
-
-        .card h3 {
-            font-size: 13px;
-            color: var(--accent);
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 6px
-        }
-
-        .stat-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px
-        }
-
-        .stat {
-            background: var(--bg);
-            border-radius: 6px;
-            padding: 8px 10px
-        }
-
-        .stat .label {
-            font-size: 11px;
-            color: var(--muted)
-        }
-
-        .stat .value {
-            font-size: 15px;
-            font-weight: 600;
-            margin-top: 2px
-        }
-
-        .chart-container {
-            position: relative;
-            height: 180px
-        }
-
-        .bar-chart {
-            display: flex;
-            align-items: flex-end;
-            gap: 4px;
-            height: 120px;
-            padding-top: 8px
-        }
-
-        .bar-chart .bar-wrap {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px
-        }
-
-        .bar-chart .bar {
-            width: 100%;
-            background: var(--accent2);
-            border-radius: 3px 3px 0 0;
-            min-height: 2px;
-            transition: height .4s
-        }
-
-        .bar-chart .bar-label {
-            font-size: 10px;
-            color: var(--muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 60px;
-            text-align: center
-        }
-
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--muted);
-            gap: 12px;
-            text-align: center;
-            padding: 40px
-        }
-
-        .empty-state svg {
-            opacity: .4
-        }
-
-        .empty-state p {
-            max-width: 320px;
-            line-height: 1.6
-        }
-
-        /* Data table */
-        .data-table-wrap {
-            overflow: auto;
-            max-height: 70vh
-        }
-
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px
-        }
-
-        .data-table th {
-            position: sticky;
-            top: 0;
-            background: var(--panel);
-            color: var(--accent);
-            padding: 8px 12px;
-            text-align: left;
-            border-bottom: 2px solid var(--border);
-            white-space: nowrap
-        }
-
-        .data-table td {
-            padding: 6px 12px;
-            border-bottom: 1px solid var(--border);
-            white-space: nowrap;
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis
-        }
-
-        .data-table tr:hover td {
-            background: var(--hover)
-        }
-
-        /* Correlation */
-        .corr-grid {
-            display: grid;
-            gap: 1px;
-            font-size: 11px
-        }
-
-        .corr-cell {
-            padding: 4px;
-            text-align: center;
-            border-radius: 2px;
-            font-weight: 500
-        }
-
-        /* Chat */
-        .chat-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            user-select: none
-        }
-
-        .chat-header svg {
-            flex-shrink: 0
-        }
-
-        .chat-header span {
-            font-weight: 600;
-            font-size: 15px;
-            white-space: nowrap
-        }
-
-        .chat-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px
-        }
-
-        .msg {
-            max-width: 92%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            font-size: 13px;
-            line-height: 1.55;
-            word-wrap: break-word
-        }
-
-        .msg.bot {
-            background: var(--card);
-            align-self: flex-start;
-            border-bottom-left-radius: 4px
-        }
-
-        .msg.user {
-            background: var(--accent2);
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
-            color: #fff
-        }
-
-        .msg pre {
-            background: var(--bg);
-            padding: 8px;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 6px 0;
-            font-size: 12px
-        }
-
-        .msg code {
-            font-size: 12px
-        }
-
-        .msg table {
-            border-collapse: collapse;
-            margin: 6px 0;
-            font-size: 12px
-        }
-
-        .msg table th,
-        .msg table td {
-            border: 1px solid var(--border);
-            padding: 4px 8px
-        }
-
-        .chat-input-area {
-            padding: 12px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 8px
-        }
-
-        .chat-input-area input {
-            flex: 1;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 14px;
-            color: var(--text);
-            font-size: 13px;
-            outline: none
-        }
-
-        .chat-input-area input:focus {
-            border-color: var(--accent)
-        }
-
-        .chat-input-area button {
-            background: var(--accent2);
-            border: none;
-            border-radius: 8px;
-            padding: 0 16px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 13px;
-            transition: background .15s
-        }
-
-        .chat-input-area button:hover {
-            background: var(--accent)
-        }
-
-        /* Resize handles */
-        .resize-handle {
-            width: 4px;
-            cursor: col-resize;
-            background: transparent;
-            transition: background .15s;
-            flex-shrink: 0
-        }
-
-        .resize-handle:hover,
-        .resize-handle.active {
-            background: var(--accent)
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 3px
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--muted)
-        }
-
-        /* Loading */
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin .6s linear infinite
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg)
-            }
-        }
-
-        .typing-dots::after {
-            content: '...';
-            animation: dots 1.2s steps(4, end) infinite
-        }
-
-        @keyframes dots {
-
-            0%,
-            20% {
-                content: '.'
-            }
-
-            40% {
-                content: '..'
-            }
-
-            60%,
-            100% {
-                content: '...'
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataLens Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#06090f;--sf:#0c1221;--sf2:#121a2e;--sf3:#1a2540;
+  --bd:rgba(80,120,200,.1);--bdh:rgba(80,120,200,.22);
+  --tx:#dfe6f0;--tx2:#8a9ab5;--tx3:#5a6a85;
+  --ac:#4f8ff7;--ac2:#3570d4;--acg:linear-gradient(135deg,#4f8ff7,#9b6dfa);
+  --grn:#2dd4a0;--red:#f06060;--org:#f0a030;--prp:#a080f0;--cyn:#30d0e8;
+  --glow:0 0 24px rgba(79,143,247,.12);
+  --ff:'Inter',system-ui,-apple-system,sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--tx);font:13px/1.5 var(--ff);
+  overflow:hidden;-webkit-font-smoothing:antialiased}
+.app{display:flex;height:100vh}
+
+/* --- SIDEBAR --- */
+.sidebar{width:260px;min-width:180px;background:var(--sf);border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;transition:width .2s ease;overflow:hidden}
+.sidebar.collapsed{width:42px;min-width:42px}
+.sidebar.collapsed .sb-body,.sidebar.collapsed .sb-label{display:none}
+.sb-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bd);
+  cursor:pointer;user-select:none;height:48px}
+.sb-head:hover{background:rgba(79,143,247,.03)}
+.sb-head svg{width:18px;height:18px;flex-shrink:0;opacity:.6}
+.sb-label{font-size:13px;font-weight:700;letter-spacing:.4px;white-space:nowrap;
+  background:var(--acg);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sb-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+
+.upload-zone{border:1.5px dashed var(--bdh);border-radius:10px;padding:24px 14px;text-align:center;
+  cursor:pointer;transition:all .2s;position:relative}
+.upload-zone:hover{border-color:var(--ac);background:rgba(79,143,247,.03)}
+.upload-zone.dragover{border-color:var(--ac);background:rgba(79,143,247,.05)}
+.upload-zone svg{width:28px;height:28px;margin:0 auto 8px;opacity:.35;display:block}
+.upload-zone p{color:var(--tx3);font-size:11px}
+
+.fc{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:12px}
+.fc-name{font-size:11px;font-weight:600;color:var(--ac);margin-bottom:8px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fc-item{font-size:10px;color:var(--tx3)}
+.fc-item b{display:block;font-size:14px;font-weight:700;color:var(--tx);margin-top:1px}
+
+.field-title{font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px}
+.field-list{display:flex;flex-direction:column;gap:1px;max-height:40vh;overflow-y:auto}
+.field-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;
+  font-size:11px;color:var(--tx2);transition:background .12s}
+.field-item:hover{background:var(--sf3)}
+.field-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.field-dot.n{background:var(--ac)}.field-dot.c{background:var(--prp)}
+
+/* --- MAIN --- */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 18px;
+  height:48px;min-height:48px;border-bottom:1px solid var(--bd);background:var(--sf)}
+.topbar h2{font-size:13px;font-weight:600}
+.topbar-r{display:flex;align-items:center;gap:14px}
+
+.tog{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--tx3)}
+.tog-track{width:32px;height:18px;background:var(--sf3);border:1px solid var(--bd);border-radius:9px;
+  cursor:pointer;position:relative;transition:all .2s}
+.tog-track.on{background:var(--ac2);border-color:var(--ac)}
+.tog-knob{width:12px;height:12px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;
+  transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.tog-track.on .tog-knob{transform:translateX(14px)}
+
+.tabs{display:flex;gap:2px;background:var(--sf2);border-radius:7px;padding:2px}
+.tabs button{background:none;border:none;color:var(--tx3);padding:5px 12px;border-radius:5px;
+  cursor:pointer;font-size:10px;font-weight:500;transition:all .15s;letter-spacing:.2px}
+.tabs button:hover{color:var(--tx2)}
+.tabs button.on{background:var(--ac2);color:#fff}
+
+/* --- DASHBOARD AREA --- */
+.dash{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:16px}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.kpi{background:var(--sf2);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center;
+  transition:all .2s}
+.kpi:hover{border-color:var(--bdh);box-shadow:var(--glow)}
+.kpi-v{font-size:24px;font-weight:800;background:var(--acg);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent}
+.kpi-l{font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+
+/* Chart grid */
+.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+@media(max-width:900px){.chart-grid{grid-template-columns:1fr}}
+
+.card{background:var(--sf2);border:1px solid var(--bd);border-radius:10px;padding:16px;
+  transition:all .2s;display:flex;flex-direction:column}
+.card:hover{border-color:var(--bdh);box-shadow:var(--glow)}
+.card-t{font-size:11px;font-weight:600;color:var(--tx2);text-transform:uppercase;
+  letter-spacing:.4px;margin-bottom:10px}
+.card-t.hi{color:var(--ac)}
+.card-chart{position:relative;width:100%;min-height:0;flex:1}
+.card-chart canvas{width:100%!important;height:100%!important;max-height:220px}
+
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px}
+.st{background:var(--sf3);border-radius:6px;padding:8px 10px}
+.st-l{font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px}
+.st-v{font-size:14px;font-weight:700;margin-top:2px;color:var(--tx)}
+
+/* Full-width card */
+.card-full{grid-column:1/-1}
+
+/* Data table */
+.tbl-wrap{overflow:auto;max-height:60vh;border-radius:6px;border:1px solid var(--bd)}
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl th{position:sticky;top:0;background:var(--sf3);color:var(--ac);padding:8px 12px;text-align:left;
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd)}
+.tbl td{padding:6px 12px;border-bottom:1px solid var(--bd);white-space:nowrap;max-width:180px;
+  overflow:hidden;text-overflow:ellipsis;color:var(--tx2)}
+.tbl tr:hover td{background:rgba(79,143,247,.03)}
+
+/* Builder */
+.builder-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;padding:14px;
+  background:var(--sf2);border:1px solid var(--bd);border-radius:10px}
+.bg{display:flex;flex-direction:column;gap:3px}
+.bg label{font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.4px}
+.bg select,.bg input[type=number]{background:var(--sf3);border:1px solid var(--bd);border-radius:5px;
+  padding:6px 8px;color:var(--tx);font-size:11px;outline:none;min-width:120px}
+.bg select:focus,.bg input:focus{border-color:var(--ac)}
+.bg select option{background:var(--sf2)}
+.btn{background:var(--ac2);border:none;border-radius:6px;padding:7px 16px;color:#fff;cursor:pointer;
+  font-size:11px;font-weight:500;transition:all .15s}
+.btn:hover{background:var(--ac)}
+.bc-card{background:var(--sf2);border:1px solid var(--bd);border-radius:10px;padding:14px;position:relative}
+.bc-card .bc-t{font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:8px}
+.bc-card .bc-x{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--tx3);
+  cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
+.bc-card .bc-x:hover{color:var(--red);background:rgba(240,96,96,.1)}
+
+/* Empty */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;
+  color:var(--tx3);gap:14px;text-align:center;padding:40px}
+.empty svg{width:64px;height:64px;opacity:.12}
+.empty p{max-width:320px;line-height:1.7;font-size:12px}
+
+/* --- CHAT --- */
+.chat{width:320px;min-width:240px;background:var(--sf);border-left:1px solid var(--bd);
+  display:flex;flex-direction:column;transition:width .2s ease;overflow:hidden}
+.chat.collapsed{width:42px;min-width:42px}
+.chat.collapsed .chat-body,.chat.collapsed .chat-in,.chat.collapsed .ch-label{display:none}
+.ch-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bd);
+  cursor:pointer;user-select:none;height:48px}
+.ch-head:hover{background:rgba(79,143,247,.03)}
+.ch-label{font-size:13px;font-weight:700;white-space:nowrap;
+  background:var(--acg);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:88%;padding:10px 14px;border-radius:12px;font-size:11px;line-height:1.6;word-wrap:break-word}
+.m.b{background:var(--sf2);border:1px solid var(--bd);align-self:flex-start;border-bottom-left-radius:3px;color:var(--tx2)}
+.m.u{background:var(--ac2);align-self:flex-end;border-bottom-right-radius:3px;color:#fff}
+.m pre{background:var(--bg);padding:8px;border-radius:6px;overflow-x:auto;margin:6px 0;font-size:10px}
+.m table{border-collapse:collapse;margin:6px 0;font-size:10px}
+.m table th,.m table td{border:1px solid var(--bd);padding:3px 6px}
+.chat-in{padding:12px;border-top:1px solid var(--bd);display:flex;gap:6px}
+.chat-in input{flex:1;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;
+  padding:8px 12px;color:var(--tx);font-size:11px;outline:none}
+.chat-in input:focus{border-color:var(--ac)}
+.chat-in button{background:var(--acg);border:none;border-radius:8px;padding:0 14px;color:#fff;
+  cursor:pointer;font-size:11px;font-weight:500}
+
+/* Resize */
+.rh{width:3px;cursor:col-resize;background:transparent;transition:background .15s;flex-shrink:0}
+.rh:hover,.rh.active{background:var(--ac)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bdh);border-radius:2px}
+
+.spinner{width:14px;height:14px;border:2px solid var(--bd);border-top-color:var(--ac);
+  border-radius:50%;animation:sp .5s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.typing::after{content:'...';animation:dt 1s steps(3,end) infinite}
+@keyframes dt{0%{content:'.'}33%{content:'..'}66%,100%{content:'...'}}
+</style>
 </head>
-
 <body>
-    <div class="app">
-        <!-- LEFT SIDEBAR -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header" onclick="toggleSidebar()" role="button" aria-label="Toggle sidebar"
-                tabindex="0">
-                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 6h14M3 10h14M3 14h14" />
-                </svg>
-                <span>Data Explorer</span>
-            </div>
-            <div class="sidebar-content">
-                <div class="upload-zone" id="uploadZone" role="button" aria-label="Upload CSV file" tabindex="0">
-                    <svg width="36" height="36" fill="none" stroke="var(--muted)" stroke-width="1.5"
-                        viewBox="0 0 24 24">
-                        <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" />
-                    </svg>
-                    <p>Drop CSV here or click to upload</p>
-                    <input type="file" id="fileInput" accept=".csv" hidden aria-label="CSV file input">
-                </div>
-                <div id="fileInfo"></div>
-                <div id="colList" class="col-list"></div>
-            </div>
-        </div>
-        <div class="resize-handle" id="resizeLeft"></div>
-
-        <!-- MAIN DASHBOARD -->
-        <div class="main">
-            <div class="main-header">
-                <h2 id="mainTitle">Dashboard</h2>
-                <div class="tab-bar" id="tabBar">
-                    <button class="active" data-tab="overview">Overview</button>
-                    <button data-tab="columns">Columns</button>
-                    <button data-tab="correlation">Correlation</button>
-                    <button data-tab="table">Data Table</button>
-                </div>
-            </div>
-            <div class="dashboard overview" id="dashboard">
-                <div class="empty-state" id="emptyState">
-                    <svg width="64" height="64" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
-                        <path d="M3 3v18h18M7 16l4-4 4 4 5-5" />
-                    </svg>
-                    <p>Upload a CSV file from the sidebar to start exploring your data with rich analytics and
-                        AI-powered insights.</p>
-                </div>
-            </div>
-        </div>
-        <div class="resize-handle" id="resizeRight"></div>
-
-        <!-- RIGHT CHAT PANEL -->
-        <div class="chatpanel" id="chatpanel">
-            <div class="chat-header" onclick="toggleChat()" role="button" aria-label="Toggle chat panel" tabindex="0">
-                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                </svg>
-                <span>AI Analyst</span>
-            </div>
-            <div class="chat-body" id="chatBody">
-                <div class="msg bot">Hi! Upload a CSV and ask me anything about your data. I can summarize, find
-                    patterns, or even suggest charts.</div>
-            </div>
-            <div class="chat-input-area">
-                <input type="text" id="chatInput" placeholder="Ask about your data..." aria-label="Chat message input"
-                    onkeydown="if(event.key==='Enter')sendChat()">
-                <button onclick="sendChat()" aria-label="Send message">Send</button>
-            </div>
-        </div>
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-head" onclick="document.getElementById('sidebar').classList.toggle('collapsed')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span class="sb-label">DataLens</span>
     </div>
-    <script>
-        let analytics = null;
-        let currentTab = 'overview';
-        let chartInstances = [];
+    <div class="sb-body">
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fi').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
+        <p>Drop CSV or click to browse</p>
+        <input type="file" id="fi" accept=".csv" hidden>
+      </div>
+      <div id="finfo"></div>
+      <div id="fields"></div>
+    </div>
+  </div>
+  <div class="rh" id="rL"></div>
 
-        // --- Sidebar & Chat toggle ---
-        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
-        function toggleChat() { document.getElementById('chatpanel').classList.toggle('collapsed'); }
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <h2>Dashboard</h2>
+      <div class="topbar-r">
+        <div class="tog"><span>Auto</span>
+          <div class="tog-track" id="togM" onclick="toggleMode()"><div class="tog-knob"></div></div>
+          <span>Builder</span></div>
+        <div class="tabs" id="tabs">
+          <button class="on" data-t="overview">Overview</button>
+          <button data-t="columns">Columns</button>
+          <button data-t="correlation">Correlation</button>
+          <button data-t="table">Data</button>
+        </div>
+      </div>
+    </div>
+    <div class="dash" id="dash">
+      <div class="empty" id="emptyEl">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-5"/></svg>
+        <p>Upload a CSV to explore your data with interactive analytics and AI insights.</p>
+      </div>
+    </div>
+  </div>
+  <div class="rh" id="rR"></div>
 
-        // --- Resize handles ---
-        function initResize(handleId, target, side) {
-            const handle = document.getElementById(handleId);
-            let startX, startW;
-            handle.addEventListener('mousedown', e => {
-                e.preventDefault(); handle.classList.add('active');
-                const el = document.getElementById(target);
-                startX = e.clientX; startW = el.offsetWidth;
-                const onMove = ev => {
-                    const diff = side === 'left' ? ev.clientX - startX : startX - ev.clientX;
-                    el.style.width = Math.max(200, startW + diff) + 'px';
-                };
-                const onUp = () => { handle.classList.remove('active'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-            });
-        }
-        initResize('resizeLeft', 'sidebar', 'left');
-        initResize('resizeRight', 'chatpanel', 'right');
+  <!-- CHAT -->
+  <div class="chat" id="chatP">
+    <div class="ch-head" onclick="document.getElementById('chatP').classList.toggle('collapsed')">
+      <svg style="width:18px;height:18px;flex-shrink:0;opacity:.6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <span class="ch-label">AI Analyst</span>
+    </div>
+    <div class="chat-body" id="chatBody">
+      <div class="m b">Upload a CSV and ask me anything about your data.</div>
+    </div>
+    <div class="chat-in">
+      <input id="chatIn" placeholder="Ask about your data..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</div>
+<script>
+const P=['#4f8ff7','#9b6dfa','#2dd4a0','#f0a030','#30d0e8','#f06060','#a080f0','#60c0f0','#80d060','#f08060'];
+const PA=['rgba(79,143,247,.6)','rgba(155,109,250,.6)','rgba(45,212,160,.6)','rgba(240,160,48,.6)','rgba(48,208,232,.6)','rgba(240,96,96,.6)'];
+let A=null,tab='overview',manual=false,CI=[],BC=[];
 
-        // --- Upload ---
-        const uploadZone = document.getElementById('uploadZone');
-        const fileInput = document.getElementById('fileInput');
-        uploadZone.addEventListener('click', () => fileInput.click());
-        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
-        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+// Resize
+function initR(hid,tid,dir){
+  const h=document.getElementById(hid);
+  h.onmousedown=e=>{e.preventDefault();h.classList.add('active');
+    const el=document.getElementById(tid),sx=e.clientX,sw=el.offsetWidth;
+    const mv=v=>{el.style.width=Math.max(180,(dir==='l'?sw+v.clientX-sx:sw+sx-v.clientX))+'px'};
+    const up=()=>{h.classList.remove('active');document.onmousemove=null;document.onmouseup=null};
+    document.onmousemove=mv;document.onmouseup=up};
+}
+initR('rL','sidebar','l');initR('rR','chatP','r');
 
-        function handleFile(file) {
-            if (!file.name.endsWith('.csv')) { alert('Please upload a CSV file.'); return; }
-            const fd = new FormData(); fd.append('file', file);
-            uploadZone.innerHTML = '<div class="spinner"></div><p>Analyzing...</p>';
-            fetch('/upload', { method: 'POST', body: fd })
-                .then(r => r.json()).then(data => {
-                    if (data.error) { alert(data.error); resetUpload(); return; }
-                    analytics = data;
-                    renderSidebar(file.name);
-                    renderDashboard();
-                }).catch(e => { alert('Upload failed: ' + e); resetUpload(); });
-        }
-        function resetUpload() {
-            uploadZone.innerHTML = '<svg width="36" height="36" fill="none" stroke="var(--muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg><p>Drop CSV here or click to upload</p>';
-        }
+// Upload
+const uz=document.getElementById('uploadZone'),fi=document.getElementById('fi');
+uz.ondragover=e=>{e.preventDefault();uz.classList.add('dragover')};
+uz.ondragleave=()=>uz.classList.remove('dragover');
+uz.ondrop=e=>{e.preventDefault();uz.classList.remove('dragover');if(e.dataTransfer.files.length)doUpload(e.dataTransfer.files[0])};
+fi.onchange=()=>{if(fi.files.length)doUpload(fi.files[0])};
 
-        // --- Sidebar info ---
-        function renderSidebar(fname) {
-            uploadZone.innerHTML = '✅ <b>' + fname + '</b><p style="margin-top:6px;font-size:12px;color:var(--muted)">Click to replace</p>';
-            let info = `<div class="file-info"><h4>📊 Dataset Summary</h4><div class="meta">${analytics.rows.toLocaleString()} rows × ${analytics.cols} columns<br>`;
-            const numCols = analytics.columns.filter(c => c.is_numeric).length;
-            info += `${numCols} numeric · ${analytics.cols - numCols} categorical</div></div>`;
-            document.getElementById('fileInfo').innerHTML = info;
-            let cols = analytics.columns.map(c =>
-                `<div class="col-item"><span>${c.name}</span><span class="dtype">${c.dtype}</span></div>`
-            ).join('');
-            document.getElementById('colList').innerHTML = cols;
-        }
+function doUpload(f){
+  if(!f.name.endsWith('.csv'))return alert('CSV files only.');
+  const fd=new FormData();fd.append('file',f);
+  uz.innerHTML='<div class="spinner"></div><p style="margin-top:8px;color:var(--tx3)">Analyzing...</p>';
+  fetch('/upload',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
+    if(d.error){alert(d.error);resetUZ();return}
+    A=d;BC=[];renderSB(f.name);render();
+  }).catch(e=>{alert(e);resetUZ()});
+}
+function resetUZ(){uz.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;margin:0 auto 8px;opacity:.35;display:block"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg><p>Drop CSV or click to browse</p>'}
 
-        // --- Tabs ---
-        document.getElementById('tabBar').addEventListener('click', e => {
-            if (e.target.tagName !== 'BUTTON') return;
-            document.querySelectorAll('#tabBar button').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            currentTab = e.target.dataset.tab;
-            renderDashboard();
-        });
+function renderSB(name){
+  uz.innerHTML=`<p style="font-size:11px;font-weight:600;color:var(--ac)">${name}</p><p style="font-size:10px;color:var(--tx3);margin-top:4px">Click to replace</p>`;
+  const nn=A.columns.filter(c=>c.is_numeric).length;
+  document.getElementById('finfo').innerHTML=`<div class="fc"><div class="fc-name">${name}</div>
+    <div class="fc-grid"><div class="fc-item">Rows<b>${A.rows.toLocaleString()}</b></div>
+    <div class="fc-item">Columns<b>${A.cols}</b></div>
+    <div class="fc-item">Numeric<b>${nn}</b></div>
+    <div class="fc-item">Categorical<b>${A.cols-nn}</b></div></div></div>`;
+  let h='<div class="field-title">Fields</div><div class="field-list">';
+  A.columns.forEach(c=>{h+=`<div class="field-item"><span class="field-dot ${c.is_numeric?'n':'c'}"></span>${c.name}</div>`});
+  document.getElementById('fields').innerHTML=h+'</div>';
+}
 
-        // --- Dashboard rendering ---
-        function renderDashboard() {
-            const dash = document.getElementById('dashboard');
-            chartInstances.forEach(c => c.destroy()); chartInstances = [];
-            if (!analytics) { dash.innerHTML = document.getElementById('emptyState')?.outerHTML || ''; return; }
-            dash.className = 'dashboard ' + (currentTab === 'table' ? 'table-view' : currentTab === 'correlation' ? 'table-view' : 'overview');
-            if (currentTab === 'overview') renderOverview(dash);
-            else if (currentTab === 'columns') renderColumns(dash);
-            else if (currentTab === 'correlation') renderCorrelation(dash);
-            else if (currentTab === 'table') renderTable(dash);
-        }
+// Tabs
+document.getElementById('tabs').onclick=e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('on'));
+  e.target.classList.add('on');tab=e.target.dataset.t;render();
+};
 
-        function renderOverview(dash) {
-            let html = '';
-            // Summary cards
-            html += `<div class="card"><h3>📋 Quick Stats</h3><div class="stat-grid">
-    <div class="stat"><div class="label">Rows</div><div class="value">${analytics.rows.toLocaleString()}</div></div>
-    <div class="stat"><div class="label">Columns</div><div class="value">${analytics.cols}</div></div>
-    <div class="stat"><div class="label">Numeric</div><div class="value">${analytics.columns.filter(c => c.is_numeric).length}</div></div>
-    <div class="stat"><div class="label">Categorical</div><div class="value">${analytics.columns.filter(c => !c.is_numeric).length}</div></div>
-  </div></div>`;
-            // Null overview
-            const nullCols = analytics.columns.filter(c => c.nulls > 0);
-            if (nullCols.length) {
-                html += `<div class="card"><h3>⚠️ Missing Values</h3><div class="stat-grid">${nullCols.map(c =>
-                    `<div class="stat"><div class="label">${c.name}</div><div class="value" style="color:var(--orange)">${c.nulls} (${(c.nulls / analytics.rows * 100).toFixed(1)}%)</div></div>`
-                ).join('')}</div></div>`;
-            }
-            // Top numeric distributions
-            analytics.columns.filter(c => c.is_numeric).slice(0, 4).forEach(c => {
-                html += `<div class="card"><h3>📈 ${c.name}</h3><div class="stat-grid">
-      <div class="stat"><div class="label">Mean</div><div class="value">${c.mean ?? '—'}</div></div>
-      <div class="stat"><div class="label">Median</div><div class="value">${c.median ?? '—'}</div></div>
-      <div class="stat"><div class="label">Std Dev</div><div class="value">${c.std ?? '—'}</div></div>
-      <div class="stat"><div class="label">Range</div><div class="value">${c.min ?? '—'} – ${c.max ?? '—'}</div></div>
-    </div><canvas id="hist_${c.name.replace(/\W/g, '_')}" height="140"></canvas></div>`;
-            });
-            // Top categorical
-            analytics.columns.filter(c => !c.is_numeric).slice(0, 4).forEach(c => {
-                if (!c.top_values || !c.top_values.length) return;
-                html += `<div class="card"><h3>🏷️ ${c.name}</h3><canvas id="cat_${c.name.replace(/\W/g, '_')}" height="160"></canvas></div>`;
-            });
-            dash.innerHTML = html;
-            // Draw charts after DOM update
-            requestAnimationFrame(() => {
-                analytics.columns.filter(c => c.is_numeric).slice(0, 4).forEach(c => {
-                    const el = document.getElementById('hist_' + c.name.replace(/\W/g, '_'));
-                    if (!el || !c.histogram) return;
-                    const labels = c.histogram.edges.slice(0, -1).map((e, i) => `${e.toFixed(1)}`);
-                    chartInstances.push(new Chart(el, {
-                        type: 'bar', data: {
-                            labels, datasets: [{
-                                data: c.histogram.counts,
-                                backgroundColor: 'rgba(31,111,235,.6)', borderRadius: 3
-                            }]
-                        }, options: {
-                            plugins: { legend: { display: false } },
-                            scales: { x: { display: false }, y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } } }
-                        }
-                    }));
-                });
-                analytics.columns.filter(c => !c.is_numeric).slice(0, 4).forEach(c => {
-                    const el = document.getElementById('cat_' + c.name.replace(/\W/g, '_'));
-                    if (!el || !c.top_values) return;
-                    const colors = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#79c0ff', '#56d364', '#e3b341', '#ffa198', '#d2a8ff'];
-                    chartInstances.push(new Chart(el, {
-                        type: 'doughnut', data: {
-                            labels: c.top_values.map(v => v.value),
-                            datasets: [{ data: c.top_values.map(v => v.count), backgroundColor: colors }]
-                        },
-                        options: { plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: { size: 11 } } } } }
-                    }));
-                });
-            });
-        }
+function toggleMode(){
+  manual=!manual;
+  document.getElementById('togM').classList.toggle('on',manual);
+  document.getElementById('tabs').style.display=manual?'none':'flex';
+  render();
+}
 
-        function renderColumns(dash) {
-            let html = '';
-            analytics.columns.forEach(c => {
-                html += `<div class="card"><h3>${c.is_numeric ? '🔢' : '🏷️'} ${c.name} <span class="dtype" style="margin-left:auto">${c.dtype}</span></h3>`;
-                html += `<div class="stat-grid">
-      <div class="stat"><div class="label">Unique</div><div class="value">${c.unique}</div></div>
-      <div class="stat"><div class="label">Nulls</div><div class="value">${c.nulls}</div></div>`;
-                if (c.is_numeric) {
-                    html += `<div class="stat"><div class="label">Min</div><div class="value">${c.min ?? '—'}</div></div>
-        <div class="stat"><div class="label">Max</div><div class="value">${c.max ?? '—'}</div></div>
-        <div class="stat"><div class="label">Mean</div><div class="value">${c.mean ?? '—'}</div></div>
-        <div class="stat"><div class="label">Median</div><div class="value">${c.median ?? '—'}</div></div>
-        <div class="stat"><div class="label">Q1</div><div class="value">${c.q1 ?? '—'}</div></div>
-        <div class="stat"><div class="label">Q3</div><div class="value">${c.q3 ?? '—'}</div></div>`;
-                }
-                html += '</div>';
-                if (!c.is_numeric && c.top_values) {
-                    html += '<div style="margin-top:10px">' + c.top_values.map(v =>
-                        `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${v.value}</span><span style="color:var(--muted)">${v.count}</span></div>`
-                    ).join('') + '</div>';
-                }
-                html += '</div>';
-            });
-            dash.innerHTML = html;
-        }
+function render(){
+  const d=document.getElementById('dash');
+  CI.forEach(c=>c.destroy());CI=[];
+  if(!A){d.innerHTML=document.getElementById('emptyEl')?.outerHTML||'';return}
+  if(manual){renderBuilder(d);return}
+  if(tab==='overview')renderOV(d);
+  else if(tab==='columns')renderCols(d);
+  else if(tab==='correlation')renderCorr(d);
+  else renderTbl(d);
+}
 
-        function renderCorrelation(dash) {
-            if (!analytics.correlation) { dash.innerHTML = '<div class="card"><h3>Correlation Matrix</h3><p style="color:var(--muted)">Need at least 2 numeric columns.</p></div>'; return; }
-            const { labels, matrix } = analytics.correlation;
-            let html = '<div class="card" style="overflow:auto"><h3>🔗 Correlation Matrix</h3>';
-            html += '<table class="data-table"><thead><tr><th></th>' + labels.map(l => `<th>${l}</th>`).join('') + '</tr></thead><tbody>';
-            matrix.forEach((row, i) => {
-                html += '<tr><td style="font-weight:600;color:var(--accent)">' + labels[i] + '</td>';
-                row.forEach(v => {
-                    const abs = Math.abs(v);
-                    const bg = v > 0 ? `rgba(63,185,80,${abs * .5})` : `rgba(248,81,73,${abs * .5})`;
-                    html += `<td style="background:${bg};text-align:center">${v.toFixed(2)}</td>`;
-                });
-                html += '</tr>';
-            });
-            html += '</tbody></table></div>';
-            dash.innerHTML = html;
-        }
+// ---- OVERVIEW ----
+function renderOV(d){
+  const nc=A.columns.filter(c=>c.is_numeric), cc=A.columns.filter(c=>!c.is_numeric);
+  const nullT=A.columns.reduce((s,c)=>s+c.nulls,0);
+  const comp=((1-nullT/(A.rows*A.cols))*100).toFixed(1);
 
-        function renderTable(dash) {
-            if (!analytics.sample || !analytics.sample.length) { dash.innerHTML = '<div class="card"><p>No data.</p></div>'; return; }
-            const cols = Object.keys(analytics.sample[0]);
-            let html = '<div class="card" style="overflow:auto"><h3>📄 Sample Data (first 5 rows)</h3><div class="data-table-wrap"><table class="data-table"><thead><tr>';
-            cols.forEach(c => html += `<th>${c}</th>`);
-            html += '</tr></thead><tbody>';
-            analytics.sample.forEach(row => {
-                html += '<tr>' + cols.map(c => `<td>${row[c] ?? ''}</td>`).join('') + '</tr>';
-            });
-            html += '</tbody></table></div></div>';
-            dash.innerHTML = html;
-        }
+  let h=`<div class="kpis">
+    <div class="kpi"><div class="kpi-v">${A.rows.toLocaleString()}</div><div class="kpi-l">Rows</div></div>
+    <div class="kpi"><div class="kpi-v">${A.cols}</div><div class="kpi-l">Columns</div></div>
+    <div class="kpi"><div class="kpi-v">${nc.length}</div><div class="kpi-l">Numeric</div></div>
+    <div class="kpi"><div class="kpi-v">${cc.length}</div><div class="kpi-l">Categorical</div></div>
+    <div class="kpi"><div class="kpi-v">${comp}%</div><div class="kpi-l">Completeness</div></div>
+  </div>`;
 
-        // --- Chat ---
-        function sendChat() {
-            const input = document.getElementById('chatInput');
-            const msg = input.value.trim();
-            if (!msg) return;
-            appendMsg(msg, 'user');
-            input.value = '';
-            const typing = appendMsg('<span class="typing-dots">Thinking</span>', 'bot', true);
-            fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
-                .then(r => {
-                    if (!r.ok) throw new Error('Server returned ' + r.status);
-                    return r.json();
-                })
-                .then(data => {
-                    if (typing.parentNode) typing.remove();
-                    const reply = data.reply || 'Sorry, something went wrong.';
-                    // Check for chart blocks
-                    const chartMatch = reply.match(/```chart\s*([\s\S]*?)```/);
-                    if (chartMatch) {
-                        try {
-                            const spec = JSON.parse(chartMatch[1]);
-                            const textPart = reply.replace(/```chart[\s\S]*?```/, '').trim();
-                            if (textPart) appendMsg(marked.parse(textPart), 'bot', true);
-                            appendChart(spec);
-                        } catch (e) { appendMsg(marked.parse(reply), 'bot', true); }
-                    } else {
-                        appendMsg(marked.parse(reply), 'bot', true);
-                    }
-                }).catch(e => { if (typing.parentNode) typing.remove(); appendMsg('Error: ' + e.message, 'bot'); });
-        }
+  // Smart chart selection: show distributions for numeric, breakdowns for categorical
+  if(nc.length>0){
+    h+='<div class="chart-grid">';
+    nc.forEach((c,i)=>{
+      if(!c.histogram||!c.histogram.counts.length) return;
+      // Only show if histogram has meaningful data (not all same bin)
+      const nonZero=c.histogram.counts.filter(v=>v>0).length;
+      if(nonZero<2) return;
+      h+=`<div class="card">
+        <div class="card-t">${c.name} Distribution</div>
+        <div class="stat-grid">
+          <div class="st"><div class="st-l">Mean</div><div class="st-v">${fmt(c.mean)}</div></div>
+          <div class="st"><div class="st-l">Median</div><div class="st-v">${fmt(c.median)}</div></div>
+          <div class="st"><div class="st-l">Std Dev</div><div class="st-v">${fmt(c.std)}</div></div>
+          <div class="st"><div class="st-l">Range</div><div class="st-v">${fmt(c.min)} - ${fmt(c.max)}</div></div>
+        </div>
+        <div class="card-chart"><canvas id="h_${sf(c.name)}"></canvas></div>
+      </div>`;
+    });
+    h+='</div>';
+  }
 
-        function appendMsg(content, role, isHtml = false) {
-            const body = document.getElementById('chatBody');
-            const div = document.createElement('div');
-            div.className = 'msg ' + role;
-            if (isHtml) div.innerHTML = content; else div.textContent = content;
-            body.appendChild(div);
-            body.scrollTop = body.scrollHeight;
-            return div;
-        }
+  if(cc.length>0){
+    h+='<div class="chart-grid">';
+    cc.forEach(c=>{
+      if(!c.top_values||c.top_values.length<2) return;
+      h+=`<div class="card">
+        <div class="card-t">${c.name} Breakdown</div>
+        <div class="card-chart"><canvas id="c_${sf(c.name)}"></canvas></div>
+      </div>`;
+    });
+    h+='</div>';
+  }
 
-        function appendChart(spec) {
-            const body = document.getElementById('chatBody');
-            const wrap = document.createElement('div');
-            wrap.className = 'msg bot';
-            wrap.style.width = '100%';
-            const canvas = document.createElement('canvas');
-            canvas.height = 200;
-            wrap.appendChild(canvas);
-            body.appendChild(wrap);
-            body.scrollTop = body.scrollHeight;
-            const colors = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff'];
-            new Chart(canvas, {
-                type: spec.type || 'bar', data: {
-                    labels: spec.labels || [],
-                    datasets: (spec.datasets || []).map((ds, i) => ({
-                        ...ds, backgroundColor: colors[i % colors.length],
-                        borderColor: colors[i % colors.length]
-                    }))
-                },
-                options: {
-                    plugins: {
-                        title: { display: !!spec.title, text: spec.title, color: '#c9d1d9' },
-                        legend: { labels: { color: '#c9d1d9' } }
-                    }, scales: { x: { ticks: { color: '#8b949e' } }, y: { ticks: { color: '#8b949e' } } }
-                }
-            });
-        }
-    </script>
+  // Correlation preview if available
+  if(A.correlation && A.correlation.labels.length>=2){
+    h+=`<div class="card">
+      <div class="card-t">Top Correlations</div>
+      <div id="corrPreview"></div>
+    </div>`;
+  }
+
+  d.innerHTML=h;
+  requestAnimationFrame(()=>{
+    // Draw histograms
+    nc.forEach((c,i)=>{
+      const el=document.getElementById('h_'+sf(c.name));
+      if(!el||!c.histogram||c.histogram.counts.filter(v=>v>0).length<2) return;
+      const lbl=c.histogram.edges.slice(0,-1).map(e=>e.toFixed(1));
+      CI.push(new Chart(el,{type:'bar',data:{labels:lbl,datasets:[{data:c.histogram.counts,
+        backgroundColor:PA[i%PA.length],borderRadius:3,borderSkipped:false}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+          scales:{x:{grid:{display:false},ticks:{display:false}},
+            y:{grid:{color:'rgba(80,120,200,.06)'},ticks:{color:'#5a6a85',font:{size:9}}}}}}));
+    });
+    // Draw categoricals
+    cc.forEach(c=>{
+      const el=document.getElementById('c_'+sf(c.name));
+      if(!el||!c.top_values||c.top_values.length<2) return;
+      // Use horizontal bar for categories - much more readable
+      CI.push(new Chart(el,{type:'bar',data:{
+        labels:c.top_values.map(v=>v.value.length>15?v.value.slice(0,15)+'..':v.value),
+        datasets:[{data:c.top_values.map(v=>v.count),backgroundColor:P.slice(0,c.top_values.length),
+          borderRadius:3,borderSkipped:false}]},
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{x:{grid:{color:'rgba(80,120,200,.06)'},ticks:{color:'#5a6a85',font:{size:9}}},
+            y:{grid:{display:false},ticks:{color:'#8a9ab5',font:{size:10}}}}}}));
+    });
+    // Correlation preview: show top 5 strongest pairs
+    if(A.correlation){
+      const pairs=[];
+      const lb=A.correlation.labels,mx=A.correlation.matrix;
+      for(let i=0;i<lb.length;i++)for(let j=i+1;j<lb.length;j++)
+        pairs.push({a:lb[i],b:lb[j],v:mx[i][j]});
+      pairs.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+      const el=document.getElementById('corrPreview');
+      if(el) el.innerHTML=pairs.slice(0,5).map(p=>{
+        const c=p.v>0?'var(--ac)':'var(--red)';
+        const w=Math.abs(p.v)*100;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)">
+          <span style="font-size:11px;color:var(--tx2);min-width:180px">${p.a} / ${p.b}</span>
+          <div style="flex:1;height:6px;background:var(--sf3);border-radius:3px;overflow:hidden">
+            <div style="width:${w}%;height:100%;background:${c};border-radius:3px"></div></div>
+          <span style="font-size:11px;font-weight:600;color:${c};min-width:45px;text-align:right">${p.v.toFixed(2)}</span>
+        </div>`;
+      }).join('');
+    }
+  });
+}
+
+// ---- COLUMNS ----
+function renderCols(d){
+  let h='<div class="chart-grid">';
+  A.columns.forEach(c=>{
+    h+=`<div class="card"><div class="card-t">${c.name}</div><div class="stat-grid">
+      <div class="st"><div class="st-l">Unique</div><div class="st-v">${c.unique}</div></div>
+      <div class="st"><div class="st-l">Missing</div><div class="st-v">${c.nulls}</div></div>`;
+    if(c.is_numeric){
+      h+=`<div class="st"><div class="st-l">Min</div><div class="st-v">${fmt(c.min)}</div></div>
+        <div class="st"><div class="st-l">Max</div><div class="st-v">${fmt(c.max)}</div></div>
+        <div class="st"><div class="st-l">Mean</div><div class="st-v">${fmt(c.mean)}</div></div>
+        <div class="st"><div class="st-l">Median</div><div class="st-v">${fmt(c.median)}</div></div>
+        <div class="st"><div class="st-l">Q1</div><div class="st-v">${fmt(c.q1)}</div></div>
+        <div class="st"><div class="st-l">Q3</div><div class="st-v">${fmt(c.q3)}</div></div>`;
+    }
+    h+='</div>';
+    if(!c.is_numeric&&c.top_values){
+      h+='<div style="margin-top:10px">'+c.top_values.map(v=>{
+        const pct=(v.count/A.rows*100).toFixed(1);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px">
+          <span style="color:var(--tx2);flex:1">${v.value}</span>
+          <div style="width:80px;height:4px;background:var(--sf3);border-radius:2px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:var(--ac);border-radius:2px"></div></div>
+          <span style="color:var(--tx3);min-width:30px;text-align:right">${v.count}</span></div>`;
+      }).join('')+'</div>';
+    }
+    h+='</div>';
+  });
+  d.innerHTML=h+'</div>';
+}
+
+// ---- CORRELATION ----
+function renderCorr(d){
+  if(!A.correlation){d.innerHTML='<div class="card"><div class="card-t">Correlation Matrix</div><p style="color:var(--tx3)">Need at least 2 numeric columns.</p></div>';return}
+  const{labels:lb,matrix:mx}=A.correlation;
+  let h='<div class="card"><div class="card-t">Correlation Matrix</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th></th>';
+  lb.forEach(l=>h+=`<th>${l}</th>`);
+  h+='</tr></thead><tbody>';
+  mx.forEach((row,i)=>{
+    h+=`<tr><td style="font-weight:600;color:var(--ac)">${lb[i]}</td>`;
+    row.forEach((v,j)=>{
+      const a=Math.abs(v);
+      const bg=i===j?'transparent':v>0?`rgba(79,143,247,${a*.5})`:`rgba(240,96,96,${a*.5})`;
+      h+=`<td style="background:${bg};text-align:center;font-weight:${a>.5?'600':'400'}">${i===j?'1.00':v.toFixed(2)}</td>`;
+    });
+    h+='</tr>';
+  });
+  d.innerHTML=h+'</tbody></table></div></div>';
+}
+
+// ---- TABLE ----
+function renderTbl(d){
+  const rows=A.all_data||A.sample;
+  if(!rows||!rows.length){d.innerHTML='<div class="card"><p style="color:var(--tx3)">No data.</p></div>';return}
+  const cols=Object.keys(rows[0]);
+  const show=rows.slice(0,100);
+  let h=`<div class="card"><div class="card-t">Data Preview (${show.length} of ${A.rows} rows)</div><div class="tbl-wrap"><table class="tbl"><thead><tr>`;
+  cols.forEach(c=>h+=`<th>${c}</th>`);
+  h+='</tr></thead><tbody>';
+  show.forEach(r=>{h+='<tr>'+cols.map(c=>`<td>${r[c]!=null?r[c]:''}</td>`).join('')+'</tr>'});
+  d.innerHTML=h+'</tbody></table></div></div>';
+}
+
+// ---- BUILDER ----
+function renderBuilder(d){
+  const nc=A.columns.filter(c=>c.is_numeric).map(c=>c.name);
+  const ac=A.columns.map(c=>c.name);
+  const cc=A.columns.filter(c=>!c.is_numeric).map(c=>c.name);
+  let h=`<div class="builder-bar">
+    <div class="bg"><label>Type</label><select id="bT">
+      <option value="bar">Bar</option><option value="line">Line</option><option value="pie">Pie</option>
+      <option value="doughnut">Doughnut</option><option value="scatter">Scatter</option>
+      <option value="polarArea">Polar Area</option></select></div>
+    <div class="bg"><label>X / Labels</label><select id="bX">${ac.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="bg"><label>Y / Values</label><select id="bY">${nc.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="bg"><label>Group By</label><select id="bG"><option value="">None</option>${cc.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="bg"><label>Aggregation</label><select id="bA">
+      <option value="sum">Sum</option><option value="mean">Mean</option><option value="count">Count</option>
+      <option value="min">Min</option><option value="max">Max</option></select></div>
+    <div class="bg"><label>Limit</label><input type="number" id="bL" value="20" min="1" max="500"></div>
+    <div class="bg" style="justify-content:flex-end"><button class="btn" onclick="addBC()">Add Chart</button></div>
+  </div><div class="chart-grid" id="bcArea"></div>`;
+  d.innerHTML=h;
+  drawAllBC();
+}
+
+function addBC(){
+  BC.push({id:'bc'+Date.now(),type:document.getElementById('bT').value,
+    x:document.getElementById('bX').value,y:document.getElementById('bY').value,
+    g:document.getElementById('bG').value,agg:document.getElementById('bA').value,
+    lim:parseInt(document.getElementById('bL').value)||20});
+  drawAllBC();
+}
+function remBC(id){BC=BC.filter(c=>c.id!==id);drawAllBC()}
+
+function drawAllBC(){
+  const area=document.getElementById('bcArea');if(!area)return;
+  CI.forEach(c=>c.destroy());CI=[];
+  area.innerHTML=BC.map(c=>`<div class="bc-card"><div class="bc-t">${c.y} by ${c.x} (${c.agg})${c.g?' / '+c.g:''}</div>
+    <button class="bc-x" onclick="remBC('${c.id}')">x</button>
+    <div style="position:relative;height:240px"><canvas id="${c.id}"></canvas></div></div>`).join('');
+  requestAnimationFrame(()=>BC.forEach(drawBC));
+}
+
+function drawBC(cfg){
+  const el=document.getElementById(cfg.id);if(!el)return;
+  const rows=A.all_data||A.sample||[];
+  const isPie=['pie','doughnut','polarArea'].includes(cfg.type);
+  let labels=[],datasets=[];
+
+  if(cfg.g){
+    // Grouped
+    const gm={},xs=new Set();
+    rows.forEach(r=>{const g=String(r[cfg.g]||''),x=String(r[cfg.x]||'');xs.add(x);
+      if(!gm[g])gm[g]={};if(!gm[g][x])gm[g][x]=[];gm[g][x].push(parseFloat(r[cfg.y])||0)});
+    labels=[...xs].slice(0,cfg.lim);
+    Object.keys(gm).forEach((g,i)=>{
+      datasets.push({label:g,data:labels.map(x=>agg(gm[g][x]||[],cfg.agg)),
+        backgroundColor:P[i%P.length]+'99',borderColor:P[i%P.length],borderWidth:2,borderRadius:3,tension:.3})});
+  } else {
+    const bk={};
+    rows.forEach(r=>{const x=String(r[cfg.x]||'');if(!bk[x])bk[x]=[];bk[x].push(parseFloat(r[cfg.y])||0)});
+    const ent=Object.entries(bk).slice(0,cfg.lim);
+    labels=ent.map(e=>e[0].length>20?e[0].slice(0,20)+'..':e[0]);
+    const data=ent.map(e=>agg(e[1],cfg.agg));
+    datasets=[{label:cfg.y,data,backgroundColor:isPie?P:PA[0],borderColor:isPie?'#0c1221':P[0],
+      borderWidth:isPie?1:2,borderRadius:3,tension:.3,fill:cfg.type==='line'}];
+  }
+
+  CI.push(new Chart(el,{type:cfg.type,data:{labels,datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:datasets.length>1||isPie,labels:{color:'#8a9ab5',font:{size:10}}}},
+      scales:isPie?{}:{x:{grid:{color:'rgba(80,120,200,.05)'},ticks:{color:'#5a6a85',font:{size:9},maxRotation:45}},
+        y:{grid:{color:'rgba(80,120,200,.05)'},ticks:{color:'#5a6a85',font:{size:9}}}}}}));
+}
+
+function agg(v,t){if(!v.length)return 0;switch(t){
+  case'sum':return v.reduce((a,b)=>a+b,0);case'mean':return+(v.reduce((a,b)=>a+b,0)/v.length).toFixed(2);
+  case'count':return v.length;case'min':return Math.min(...v);case'max':return Math.max(...v);default:return v.reduce((a,b)=>a+b,0)}}
+
+function fmt(v){return v!=null?Number(v).toLocaleString(undefined,{maximumFractionDigits:2}):'--'}
+function sf(s){return s.replace(/\W/g,'_')}
+
+// ---- CHAT ----
+function sendChat(){
+  const inp=document.getElementById('chatIn'),msg=inp.value.trim();if(!msg)return;
+  addM(msg,'u');inp.value='';
+  const t=addM('<span class="typing">Thinking</span>','b',true);
+  fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})})
+    .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
+    .then(d=>{if(t.parentNode)t.remove();
+      const rp=d.reply||'Something went wrong.';
+      const cm=rp.match(/```chart\s*([\s\S]*?)```/);
+      if(cm){try{const sp=JSON.parse(cm[1]);const tx=rp.replace(/```chart[\s\S]*?```/,'').trim();
+        if(tx)addM(marked.parse(tx),'b',true);addChatChart(sp)}catch(e){addM(marked.parse(rp),'b',true)}}
+      else addM(marked.parse(rp),'b',true);
+    }).catch(e=>{if(t.parentNode)t.remove();addM('Error: '+e.message,'b')});
+}
+function addM(c,r,html){
+  const b=document.getElementById('chatBody'),d=document.createElement('div');
+  d.className='m '+r;if(html)d.innerHTML=c;else d.textContent=c;
+  b.appendChild(d);b.scrollTop=b.scrollHeight;return d;
+}
+function addChatChart(spec){
+  const b=document.getElementById('chatBody'),w=document.createElement('div');
+  w.className='m b';w.style.width='100%';
+  const cv=document.createElement('canvas');cv.height=180;w.appendChild(cv);b.appendChild(w);b.scrollTop=b.scrollHeight;
+  new Chart(cv,{type:spec.type||'bar',data:{labels:spec.labels||[],
+    datasets:(spec.datasets||[]).map((ds,i)=>({...ds,backgroundColor:P[i%P.length],borderColor:P[i%P.length]}))},
+    options:{responsive:true,plugins:{title:{display:!!spec.title,text:spec.title,color:'#8a9ab5'},
+      legend:{labels:{color:'#8a9ab5'}}},scales:{x:{ticks:{color:'#5a6a85'}},y:{ticks:{color:'#5a6a85'}}}}});
+}
+</script>
 </body>
-
 </html>
